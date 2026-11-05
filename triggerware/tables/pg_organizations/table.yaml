@@ -1,0 +1,16 @@
+# Describes the pg_organizations table to Triggerware: its columns (in the
+# same order table.js returns them), and the one way to fetch rows ("all").
+description: Organizations from the app's Postgres database (spike table).
+columns:
+  - name: id
+    type: string
+  - name: name
+    type: string
+  - name: slug
+    type: string
+generators:
+  - name: all
+    inputs: []
+# The connection string is supplied as config, not hard-coded in table.js.
+config_schema:
+  connection_url: string
