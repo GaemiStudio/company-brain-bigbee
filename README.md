@@ -1,256 +1,203 @@
-# App Starter
+# Company Brain
 
-A multi-tenant SaaS starter. NestJS and Next.js in a Turborepo, with the parts
-every SaaS needs already wired together: authentication, organizations with
-roles and invites, per-tenant custom domains, and a notification engine.
+**Organic problems, solved organically, checked against the laws in stone.**
 
-Billing is deliberately not included — payment provider and pricing model vary
-too much between products for a starter to choose for you.
+Every company runs on two kinds of knowledge. The **official kind** —
+policies, inventories, business data — is verified, like laws carved in stone.
+The **organic kind** is what employees actually say in chat every day. It's
+sporadic and chaotic, but it's where problems show up first, and often where
+their solutions are hiding.
 
-It ships with one small example vertical — Projects — so the patterns are
-visible end to end without burying them in a domain you have to delete.
+Company Brain watches workplace chat, detects recurring problems, finds the
+solution hidden in the same conversation, and checks it against company policy
+before recommending what to do.
 
-## What you get
+Everything runs locally and offline on one laptop, with no paid API keys.
 
-|                    |                                                                                   |
-| ------------------ | --------------------------------------------------------------------------------- |
-| **Auth**           | Email + password, OTP, Google OAuth, email verification, JWT with refresh cookies |
-| **Multi-tenancy**  | Organizations with `OWNER` / `ADMIN` / `MEMBER`, invite links, member management  |
-| **Custom domains** | Per-tenant domains with DNS verification and white-label branding                 |
-| **Notifications**  | Email and in-app, with per-user channel preferences                               |
-| **Admin**          | User search, quarantine, and impersonation — both fully audited                   |
-| **Storage**        | Provider interface with local and S3/R2 implementations                           |
+## The demo: Big Bee's IT team
 
-## Requirements
+1. **🔴 Problem detected.** More than 5 employees in `#it-help` report that the
+   **Next** button on the Hive expense form does nothing. Triggerware fires,
+   and the IT manager (Priya) gets an in-app alert and an email.
+2. **🟢 Solution emerges.** A few employees say it works fine for them. Nobody
+   mentions a browser, but the brain joins the chat authors to the **verified
+   IT laptop inventory** and finds the pattern: every stuck employee is on a
+   MacBook with Safari, and everyone who got through is on Windows.
+3. **💎 Match.** The problem and solution groups match on meaning (similarity
+   about 0.91), and the brain writes a report.
+4. **Checked against policy.** The obvious workaround, "just use Chrome,"
+   breaks Big Bee's software policy on Macs. The report flags that risk,
+   estimates about 143 affected employees ahead of Friday's expense deadline,
+   and recommends the policy-approved path: a Sev-2 fix, a temporary
+   IT-managed workaround, and a status update.
 
-- Node 22+ (`.nvmrc` pins it)
-- pnpm 8+
-- Docker with Compose, or Podman — PostgreSQL and Redis are both required, and
-  `docker compose` runs them for you
+## How it works
 
-## Setup
-
-```bash
-git clone <this-repo>
-cd app-starter
-pnpm bootstrap
+```
+#it-help message
+   │  classify (problem / success / neither, keyword rules)
+   │  embed (all-MiniLM-L6-v2, 384 numbers, local)
+   ▼
+brain_messages ──► brain_clusters (pgvector, nearest centroid)
+   │
+   ▼  SQL views join clusters to the laptop inventory
+brain_cluster_sizes, brain_cluster_pairs
+   │
+   ▼  custom Triggerware tables (Node runtime) read the views
+Triggerware: 3 triggers, polled every 3 seconds
+   │
+   ▼  BrainWatcherService receives only new rows
+🔴 / 🟢 alerts and 💎 report ──► notification bell + email
 ```
 
-Or skip the local toolchain entirely: `.devcontainer/` is configured, so
-**Code → Codespaces → Create codespace** on GitHub — or **Reopen in Container**
-in VS Code — gives you Node, pnpm, and Docker already installed and runs
-`pnpm bootstrap` for you. Nothing to install but the editor. In a
-browser-based Codespace, set `NEXT_PUBLIC_API_URL` to the forwarded URL for
-port 3001 and mark that port **Public**; `localhost` works as-is everywhere
-else.
+- **[Digo app-starter](https://github.com/digohq/app-starter)** (NestJS,
+  Next.js, Postgres) provides login, organizations, the notification bell and
+  email.
+- **Embeddings** come from transformers.js with `Xenova/all-MiniLM-L6-v2`. Each
+  message becomes a vector of its meaning; similar messages share a cluster.
+- **Vectors capture topic, not yes or no**: "it works" and "it doesn't work"
+  look nearly identical. So a separate keyword classifier decides problem vs.
+  success, and vectors are used only for grouping and matching.
+- **pgvector** handles similarity search. The `brain_cluster_pairs` view joins
+  chat authors to the laptop inventory to find the browser contrast.
+- **Triggerware** runs three SQL triggers:
+  - `brain_problem_threshold`: a problem group passes `PROBLEM_THRESHOLD` people.
+  - `brain_solution_signal`: a success group reaches `SOLUTION_THRESHOLD`
+    people, and none of them use the stuck group's browser.
+  - `brain_problem_solution_match`: both of the above, with meaning similarity
+    of at least `MATCH_SIMILARITY`.
 
-`pnpm bootstrap` copies the env files, installs dependencies, starts Postgres,
-Redis, and Mailpit, applies migrations, and seeds. It is safe to re-run — it
-never overwrites an env file that already exists.
+  Triggerware reports only *new* rows, so each alert fires exactly once.
+- **The report** is a template filled from the clusters, the inventory and the
+  most relevant policy facts. No AI service is needed.
 
-Then:
+### Where to look in the code
+
+| What | Where |
+| --- | --- |
+| Triggers, their SQL, and the watch callback | `apps/api/src/brain/brain-watcher.service.ts` |
+| Views joining messages to the inventory | `apps/api/prisma/migrations/0002_company_brain/migration.sql` |
+| Custom Triggerware tables | `triggerware/tables/` |
+| Classify, embed and cluster | `apps/api/src/brain/messages.service.ts` |
+| Report builder | `apps/api/src/brain/report.service.ts` |
+| Big Bee seed data | `apps/api/prisma/seed.ts` |
+| Brain page and report page | `apps/web/src/app/organizations/[organizationId]/brain/` |
+
+## Running it
+
+### Requirements
+
+- Node 22+ and pnpm 8+
+- Docker (Postgres with pgvector, Redis and Mailpit run in containers)
+- Triggerware installed locally (see the Mac fixes below)
+
+### 1. Set up the app
+
+```bash
+git clone https://github.com/GaemiStudio/company-brain-bigbee.git
+cd company-brain-bigbee
+pnpm bootstrap   # env files, dependencies, containers, migrations, seed
+```
+
+### 2. Set up Triggerware and its tables
+
+Start Triggerware, apply the Mac fixes below, then register the two Brain
+tables. See [`triggerware/README.md`](triggerware/README.md) for the full
+commands; for each of `brain_cluster_sizes` and `brain_cluster_pairs`:
+
+```bash
+cd triggerware/tables/brain_cluster_pairs
+triggerware tables create --name brain_cluster_pairs --runtime node \
+  --code "$(cat table.js)" --meta "$(cat table.yaml)"
+triggerware tables configure --name brain_cluster_pairs \
+  --config '{"connection_url":"postgresql://app_starter:app_starter@localhost:5432/app_starter"}'
+```
+
+The API installs the three triggers itself when it starts.
+
+### 3. Run the demo
 
 ```bash
 pnpm dev
 ```
 
-|                    |                                |
-| ------------------ | ------------------------------ |
-| Web                | http://localhost:3000          |
-| API                | http://localhost:3001          |
-| API docs (Swagger) | http://localhost:3001/api/docs |
-| Mailpit            | http://localhost:8025          |
+1. Open http://localhost:3000 and sign in as the Big Bee IT manager:
+   `priya@bigbee.example.com` / `Password123!` (local demo account).
+2. Open the **Big Bee** organization and click **Company Brain**.
+3. Press **Reset**, then **Simulate a workday**.
+4. When the simulation pauses, post the live message as **Jane Doe**. Use
+   wording the classifier recognizes as a problem, for example:
+   *"Next on the Hive expense form does nothing for me either."*
+5. Watch the bell: 🔴 arrives within a few seconds, then 🟢 and 💎. Open the
+   report from the bell or the Reports card. Emails land in Mailpit at
+   http://localhost:8025.
 
-Mailpit is a local inbox that catches every email the app sends — verification
-links, password resets, OTP codes, invites — so you can click through those
-flows without a mail provider. Nothing leaves your machine.
+### Settings
 
-The seed creates two accounts:
-
-```
-owner@example.com  / Password123!   (also a global admin)
-member@example.com / Password123!
-```
-
-If you would rather set up by hand, see [Manual setup](#manual-setup). If
-something breaks, [`docs/troubleshooting.md`](docs/troubleshooting.md) has the
-failures you are most likely to hit and what actually fixes them.
-
-### Then build something
-
-[**`docs/first-feature.md`**](docs/first-feature.md) walks through adding one
-feature end to end with a coding assistant — the prompt to write, the ten files
-that should come back, and how to tell whether what you got is right. Start
-there if this is your first time in a codebase this size.
-
-Google sign-in, S3/R2 storage, a real SMTP provider, and custom domains are
-all optional and off by default.
-[`docs/integrations.md`](docs/integrations.md) covers what each one needs, how
-to get credentials, and what breaks without it.
-[`docs/providers.md`](docs/providers.md) recommends who to host them with.
-
-## Architecture
+Optional, in `apps/api/.env` (defaults shown):
 
 ```
-app-starter/
-├── apps/
-│   ├── api/                  NestJS + Prisma
-│   │   ├── prisma/           schema, migrations, seed
-│   │   └── src/
-│   │       ├── auth/         JWT, OAuth, OTP, guards
-│   │       ├── organizations/  tenants, members, invites, domains
-│   │       ├── projects/     the example vertical
-│   │       ├── notifications/  engine, templates, channels
-│   │       ├── users/        profiles
-│   │       ├── admin-*/      platform admin and impersonation
-│   │       └── common/       storage, guards, filters, utils
-│   └── web/                  Next.js App Router
-│       └── src/
-│           ├── app/          routes
-│           ├── components/   ui/ is the shared component set
-│           ├── hooks/
-│           └── lib/          API clients
-├── packages/shared/          types and constants used by both apps
-└── docker/postgres/
+TRIGGERWARE_ADDRESS=127.0.0.1:5221
+CLUSTER_SIMILARITY=0.55
+MATCH_SIMILARITY=0.50
+PROBLEM_THRESHOLD=5     # fires when distinct authors > 5
+SOLUTION_THRESHOLD=3    # fires when distinct authors >= 3
 ```
 
-### Why one repository
+Set `TRIGGERWARE_ENABLED=false` to run the app without Triggerware.
 
-Two deployable apps, one repository. `apps/api` owns the database and business
-logic, `apps/web` owns the UI, and `packages/shared` holds the types and
-constants both import — as a workspace dependency, so a change to it is visible
-to both apps in the same commit with nothing to publish.
+## Triggerware fixes on a Mac
 
-The point is that a feature is **one change**. The migration, the endpoint, the
-DTO, the API client, and the screen land in a single commit: reviewable as a
-unit, revertible as a unit, and verified together by one `pnpm type-check`.
-Rename a shared field and both sides fail to compile immediately, rather than
-drifting apart until something breaks in an environment.
+The local Triggerware installer had two problems on macOS:
 
-**This matters most when you are building with a coding agent.** In one
-repository the agent can read the schema, the service, the DTO, the client, and
-the component in a single pass, so asking for a whole vertical slice — "add
-project archiving", schema through UI — produces a coherent change. Split
-across repositories, the same work becomes two conversations against two
-partial views, and the seam between them is where the mismatches land. Ask for
-the full slice, put anything crossing the boundary in `packages/shared`, and
-let the type checker confirm the two halves agree.
-
-[ADR 0009](docs/adr/0009-monorepo-over-separate-repositories.md) has the
-reasoning and the costs.
-
-Why the other pieces are what they are is recorded in
-[`docs/adr/`](docs/adr/README.md) — the framework choices, the
-frontend/backend split, the multi-tenancy model below, and why billing is
-left out.
-
-### How multi-tenancy works
-
-`Organization` is the tenant. Everything scoped to one carries an
-`organizationId`, and every query filters on it — a valid id from another
-tenant reads as 404 rather than revealing that the record exists.
-`ProjectsService` is the reference implementation; copy its shape.
-
-Role checks live in the service layer rather than a guard, because the
-organization id usually arrives as a route parameter that has to be resolved
-against the caller before a decision can be made. See
-[`docs/roles-and-permissions-guide.md`](docs/roles-and-permissions-guide.md).
-
-## Making it yours
-
-1. **Rename.** Replace `app-starter` in `package.json` files, `docker-compose.yml`,
-   and the `@app-starter/*` import scope. Update `apps/api/src/config/branding.ts`.
-2. **Replace Projects.** Delete `apps/api/src/projects` and
-   `apps/web/src/app/organizations/[organizationId]/projects`, then build your
-   own vertical on the same shape.
-3. **Add billing if you need it.** `Organization` is where it attaches — it
-   already has the identity and the membership list a seat count would use.
-   [ADR 0008](docs/adr/0008-no-billing-in-the-starter.md) explains why it is
-   left out and suggests a shape for entitlements.
-4. **Wire up the integrations you need** — Google sign-in, object storage,
-   SMTP, custom domains. See [`docs/integrations.md`](docs/integrations.md).
-5. **Before deploying,** read the checklist at the end of
-   [SECURITY.md](SECURITY.md).
-
-## Commands
-
-Run from the repository root:
-
-|                   |                                                     |
-| ----------------- | --------------------------------------------------- |
-| `pnpm dev`        | Start the API and web app                           |
-| `pnpm build`      | Build everything                                    |
-| `pnpm test`       | Run all tests                                       |
-| `pnpm verify`     | Type-check, lint, and test — the definition of done |
-| `pnpm lint`       | Lint everything                                     |
-| `pnpm type-check` | Type-check everything                               |
-| `pnpm clean`      | Remove build artifacts                              |
-| `pnpm format`     | Format with Prettier                                |
-
-Target one package with `--filter`:
+1. **The Python runtime calls `python`**, but a Mac only has `python3`. That
+   blocks the catalog's `postgres` connector. Instead, this project writes its
+   own Postgres tables in JavaScript and runs them on the Node runtime
+   (`triggerware/tables/`).
+2. **The Node runtime was missing its `tw2-jsonrpc` dependency and wasn't
+   compiled**, so tables failed with "Broken pipe". The fix:
 
 ```bash
-pnpm --filter @app-starter/api dev
-pnpm --filter @app-starter/web test
+triggerware start
+triggerware runtimes install --name node
+
+# Add the missing tw2-jsonrpc package where the runtime expects it.
+mkdir -p ~/.triggerware/tw2-jsonrpc && cd ~/.triggerware/tw2-jsonrpc
+npm pack tw2-jsonrpc@1.0.4 && tar xzf tw2-jsonrpc-1.0.4.tgz && mv package npm
+(cd npm && npm install --omit=dev --ignore-scripts)
+
+# Add the Postgres client and compile the runtime. tsc reports missing Node
+# type definitions, but still produces dist/index.js.
+cd ~/.triggerware/runtimes/node
+npm install --no-save pg@8.13.1
+npm run build
+
+triggerware stop && triggerware start
 ```
 
-### Database
+Two more things to know: table metadata (`table.yaml`) must include a
+`config_schema`, and `triggerware tables configure` prints an
+"AuthorizationResult" error even though the config is saved.
 
-```bash
-cd apps/api
-pnpm exec prisma migrate dev --name describe_your_change   # create a migration
-pnpm exec prisma studio                                     # browse the data
-pnpm run prisma:seed                                        # re-seed
-```
+## Known limitations
 
-## Manual setup
+- **The problem classifier is keyword-based.** It knows "not working" but not
+  "isn't working", so natural phrasing can be missed. That's what happened in
+  our first live demo. Next step: an AI classifier that understands any
+  phrasing.
+- The `#it-help` channel is simulated rather than connected to real Slack.
 
-If you prefer not to use `pnpm bootstrap`:
+## What's next
 
-```bash
-cp .env.example .env
-cp apps/api/.env.example apps/api/.env
-cp apps/api/.env.test.example apps/api/.env.test
-cp apps/web/.env.example apps/web/.env.local
+- An AI classifier for problem vs. success.
+- Real Slack integration.
+- One-click manager approval that promotes a solution into the company's
+  verified knowledge.
+- Beyond IT: HR questions, policy confusion and customer support trends.
 
-pnpm install
-docker compose up -d
+## Credits
 
-pnpm --filter @app-starter/api exec prisma migrate deploy
-pnpm --filter @app-starter/api run prisma:seed
-```
-
-The root `.env` only sets the ports the containers publish; application
-configuration lives in the per-app files.
-
-Database defaults: `localhost:5432`, database / user / password all
-`app_starter`. See [`docker/postgres/README.md`](docker/postgres/README.md).
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). The conventions the codebase follows
-are in [AGENTS.md](AGENTS.md), which doubles as context for coding assistants.
-
-## Security
-
-Please report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
-
-## Provenance
-
-This started as Digo, an event-management platform we built for the tech
-community to share their events. The event domain was removed and what
-remained — authentication, organizations, notifications, custom domains,
-storage, and the admin surfaces — was generalised into a starter. The Projects
-example was written from scratch.
-
-The parts carried over have production mileage behind them. The parts that are
-new do not, though they are covered by tests.
-
-Much of the extraction was done with heavy AI assistance (Claude). The full
-suite passes — API unit and end-to-end, web, lint, type-check, build — and the
-result has been reviewed, but read what you are adopting before you build on
-it, as you would with any starter.
-
-## License
-
-[MIT](LICENSE)
+Built on the [Digo app-starter](https://github.com/digohq/app-starter). Its
+original documentation lives in [`docs/`](docs/), and the conventions in
+[`AGENTS.md`](AGENTS.md). Built in about two hours, pair-programming with
+Claude Code.
