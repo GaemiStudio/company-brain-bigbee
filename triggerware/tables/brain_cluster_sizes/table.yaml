@@ -1,0 +1,16 @@
+# Columns match the order table.js returns them in.
+description: Company Brain message clusters with their number of distinct authors.
+columns:
+  - name: cluster_id
+    type: string
+  - name: organization_id
+    type: string
+  - name: kind
+    type: string
+  - name: authors
+    type: number
+generators:
+  - name: all
+    inputs: []
+config_schema:
+  connection_url: string

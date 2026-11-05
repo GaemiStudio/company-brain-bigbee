@@ -1,0 +1,24 @@
+# Columns match the order table.js returns them in.
+description: Company Brain problem/success cluster pairs with browser contrast and similarity.
+columns:
+  - name: organization_id
+    type: string
+  - name: problem_cluster_id
+    type: string
+  - name: success_cluster_id
+    type: string
+  - name: problem_authors
+    type: number
+  - name: success_authors
+    type: number
+  - name: problem_browser
+    type: string
+  - name: success_on_problem_browser
+    type: number
+  - name: similarity
+    type: number
+generators:
+  - name: all
+    inputs: []
+config_schema:
+  connection_url: string

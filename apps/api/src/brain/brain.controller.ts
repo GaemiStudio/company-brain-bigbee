@@ -13,12 +13,16 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   BrainMessage,
   BrainMessageList,
+  BrainReport,
   BrainSimulationStatus,
+  BrainState,
   TokenPayload,
 } from '@app-starter/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { EmailVerifiedGuard } from '../auth/email-verified.guard';
+import { BrainStateService } from './brain-state.service';
 import { MessagesService } from './messages.service';
+import { ReportService } from './report.service';
 import { SimulateService } from './simulate.service';
 import { CreateBrainMessageDto } from './dto/create-brain-message.dto';
 
@@ -33,7 +37,30 @@ export class BrainController {
   constructor(
     private readonly messagesService: MessagesService,
     private readonly simulateService: SimulateService,
+    private readonly stateService: BrainStateService,
+    private readonly reportService: ReportService,
   ) {}
+
+  @Get('state')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Everything the Company Brain page shows (polled every second)' })
+  async getState(
+    @Request() req: { user: TokenPayload },
+    @Param('organizationId') organizationId: string,
+  ): Promise<BrainState> {
+    return this.stateService.getState(req.user.sub, organizationId);
+  }
+
+  @Get('reports/:reportId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get one Company Brain report' })
+  async getReport(
+    @Request() req: { user: TokenPayload },
+    @Param('organizationId') organizationId: string,
+    @Param('reportId') reportId: string,
+  ): Promise<BrainReport> {
+    return this.reportService.findOne(req.user.sub, organizationId, reportId);
+  }
 
   @Post('messages')
   @HttpCode(HttpStatus.CREATED)
