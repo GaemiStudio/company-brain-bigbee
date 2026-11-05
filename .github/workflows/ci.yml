@@ -46,7 +46,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: app_starter_test
           POSTGRES_USER: app_starter
@@ -116,7 +116,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: app_starter_test
           POSTGRES_USER: app_starter

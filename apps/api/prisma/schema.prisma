@@ -153,6 +153,11 @@ model Organization {
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
   projects                Project[]
+  brainFacts              BrainFact[]
+  brainDevices            BrainDevice[]
+  brainMessages           BrainMessage[]
+  brainClusters           BrainCluster[]
+  brainReports            BrainReport[]
 
   @@map("organizations")
 }
@@ -418,4 +423,118 @@ model Project {
   @@index([organizationId, archivedAt])
   @@index([createdById])
   @@map("projects")
+}
+
+// ============================================================================
+// Company Brain
+//
+// Two sources of truth, as described in COMPANY_BRAIN_SPEC.md:
+// - "Bedrock" is verified company data: policies and facts (BrainFact) and
+//   the IT laptop inventory (BrainDevice).
+// - "Rough stone" is chat (BrainMessage). Messages that mean the same thing
+//   are grouped into a BrainCluster, and a BrainReport pairs a problem
+//   cluster with a solution cluster.
+//
+// `vector(384)` columns hold a sentence's meaning as 384 numbers (pgvector).
+// Prisma can't read or write that type, so those columns are only touched
+// through raw SQL in apps/api/src/brain. Database views that Triggerware
+// watches are created in the migration, not here.
+// ============================================================================
+
+/// A verified policy or business fact, such as "IT-04: only approved software".
+model BrainFact {
+  id             String                      @id @default(uuid())
+  organizationId String                      @map("organization_id")
+  /// Short reference such as "IT-04".
+  code           String
+  /// "policy" or "data".
+  kind           String
+  title          String
+  body           String
+  embedding      Unsupported("vector(384)")?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, code])
+  @@map("brain_facts")
+}
+
+/// One employee's company laptop and IT-managed browser.
+model BrainDevice {
+  id             String @id @default(uuid())
+  organizationId String @map("organization_id")
+  /// Matches BrainMessage.authorName; this is how chat is joined to inventory.
+  employeeName   String @map("employee_name")
+  laptop         String
+  /// "macOS" or "Windows".
+  os             String
+  /// "Safari", "Chrome" or "Edge".
+  browser        String
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, employeeName])
+  @@map("brain_devices")
+}
+
+/// One chat message from the #it-help channel.
+model BrainMessage {
+  id             String                      @id @default(uuid())
+  organizationId String                      @map("organization_id")
+  authorName     String                      @map("author_name")
+  channel        String                      @default("it-help")
+  text           String
+  /// "problem", "success" or "neither".
+  kind           String
+  clusterId      String?                     @map("cluster_id")
+  embedding      Unsupported("vector(384)")?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cluster      BrainCluster? @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([clusterId])
+  @@map("brain_messages")
+}
+
+/// A group of messages that mean the same thing (one problem, or one success).
+model BrainCluster {
+  id             String                      @id @default(uuid())
+  organizationId String                      @map("organization_id")
+  /// "problem" or "success".
+  kind           String
+  /// The first message's text, used as a readable name.
+  label          String
+  /// Average of the member messages' vectors, updated on each new member.
+  centroid       Unsupported("vector(384)")?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messages     BrainMessage[]
+
+  @@index([organizationId, kind])
+  @@map("brain_clusters")
+}
+
+/// The brain's write-up for the manager, pairing a problem with a solution.
+model BrainReport {
+  id               String @id @default(uuid())
+  organizationId   String @map("organization_id")
+  problemClusterId String @map("problem_cluster_id")
+  successClusterId String @map("success_cluster_id")
+  similarity       Float
+  /// Problem, evidence table, solution, policy checks and recommendations.
+  content          Json
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, problemClusterId, successClusterId])
+  @@map("brain_reports")
 }

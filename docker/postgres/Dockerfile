@@ -1,4 +1,6 @@
-FROM postgres:16-alpine
+# pgvector adds the `vector` column type and similarity operators used by
+# Company Brain to store message meanings. Same Postgres 16, plus the extension.
+FROM pgvector/pgvector:pg16
 
 # Set environment variables
 ENV POSTGRES_DB=app_starter
