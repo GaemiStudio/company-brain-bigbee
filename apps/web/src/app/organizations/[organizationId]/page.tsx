@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { FolderOpen, Loader2, Plus, Settings, UserPlus } from 'lucide-react';
+import { Brain, FolderOpen, Loader2, Plus, Settings, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -71,6 +71,12 @@ export default function OrganizationPage({ params }: PageProps) {
                 Invite
               </Button>
             )}
+            <Button variant="outline" asChild>
+              <Link href={`/organizations/${organizationId}/brain`}>
+                <Brain className="mr-2 h-4 w-4" />
+                Company Brain
+              </Link>
+            </Button>
             <Button variant="outline" asChild>
               <Link href={`/organizations/${organizationId}/settings`}>
                 <Settings className="mr-2 h-4 w-4" />
