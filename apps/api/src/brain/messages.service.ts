@@ -120,11 +120,25 @@ export class MessagesService implements OnModuleInit {
     });
   }
 
-  /** Delete the organization's messages, clusters and reports (the Reset button). */
+  /**
+   * Delete the organization's messages, clusters and reports, plus the
+   * Company Brain alerts already sent, so the bell starts empty (the Reset button).
+   */
   async reset(userId: string, organizationId: string): Promise<void> {
     await this.access.requireManager(userId, organizationId, 'reset the demo');
 
     await this.prisma.$transaction([
+      // Bell entries first: they're found through the notification log,
+      // which records each alert's in-app notification id. Only this
+      // organization's brain alerts are touched.
+      this.prisma.$executeRaw`
+        DELETE FROM in_app_notifications WHERE id IN (
+          SELECT metadata->>'inAppNotificationId' FROM notifications
+          WHERE definition_name = 'brain-alert' AND organization_id = ${organizationId}
+        )`,
+      this.prisma.$executeRaw`
+        DELETE FROM notifications
+        WHERE definition_name = 'brain-alert' AND organization_id = ${organizationId}`,
       this.prisma.brainReport.deleteMany({ where: { organizationId } }),
       this.prisma.brainMessage.deleteMany({ where: { organizationId } }),
       this.prisma.brainCluster.deleteMany({ where: { organizationId } }),
