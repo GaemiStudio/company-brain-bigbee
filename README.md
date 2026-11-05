@@ -125,9 +125,8 @@ pnpm dev
    `priya@bigbee.example.com` / `Password123!` (local demo account).
 2. Open the **Big Bee** organization and click **Company Brain**.
 3. Press **Reset**, then **Simulate a workday**.
-4. When the simulation pauses, post the live message as **Jane Doe**. Use
-   wording the classifier recognizes as a problem, for example:
-   *"Next on the Hive expense form does nothing for me either."*
+4. When the simulation pauses, post the live message as **Jane Doe**, for
+   example: *"hive isn't working for me either."*
 5. Watch the bell: 🔴 arrives within a few seconds, then 🟢 and 💎. Open the
    report from the bell or the Reports card. Emails land in Mailpit at
    http://localhost:8025.
@@ -181,10 +180,10 @@ Two more things to know: table metadata (`table.yaml`) must include a
 
 ## Known limitations
 
-- **The problem classifier is keyword-based.** It knows "not working" but not
-  "isn't working", so natural phrasing can be missed. That's what happened in
-  our first live demo. Next step: an AI classifier that understands any
-  phrasing.
+- **The problem classifier is keyword-based.** It covers common phrasings
+  ("isn't working", "won't let me click", "same here", "no problem"), but
+  unusual wording can still be missed. Next step: an AI classifier that
+  understands any phrasing.
 - The `#it-help` channel is simulated rather than connected to real Slack.
 
 ## What's next
